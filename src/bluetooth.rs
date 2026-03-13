@@ -71,9 +71,12 @@ async fn run_rfcomm_session(fd: OwnedFd, state: SharedState) {
                 let n = unsafe { libc::recv(raw_fd, buf.as_mut_ptr() as _, buf.len(), 0) };
                 if n > 0 {
                     let data = &buf[..n as usize];
-                    eprintln!("[Raw] {:02x?}", data);
-                    
                     let mut s = state.lock().unwrap();
+   
+                    if s.debug_mode {
+                        eprintln!("[Raw] {:02x?}", data);
+                    }
+                    
                     if protocol::parse_data(data, &mut *s) {
                         s.print_json();
                     }

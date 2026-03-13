@@ -24,6 +24,8 @@ pub struct AirPodsState {
     pub seq: u8,
     #[serde(skip)]
     pub last_hash: String,
+    #[serde(skip)]
+    pub debug_mode: bool,
 }
 
 impl Default for AirPodsState {
@@ -36,6 +38,7 @@ impl Default for AirPodsState {
             left: BatteryInfo { level: None, charging: false },
             right: BatteryInfo { level: None, charging: false },
             case: BatteryInfo { level: None, charging: false },
+            debug_mode: false,
             session_fd: None,
             seq: 0x01,
             last_hash: String::new(),

@@ -11,6 +11,7 @@ use zbus::connection::Builder;
 use zbus::zvariant::{ObjectPath, Value};
 use crate::state::AirPodsState;
 use crate::bluetooth::*;
+use clap::Parser;
 
 const PROFILE_DBUS_PATH: &str = "/com/airpods/profile";
 
@@ -41,12 +42,26 @@ async fn find_airpods(conn: &zbus::Connection) -> Result<(String, String)> {
     Err(anyhow!("No AirPods found"))
 }
 
+#[derive(Parser, Debug)]
+#[command(author, version, about = "AirPods Bridge for Linux")]
+struct Args {
+    #[arg(short, long)]
+    debug: bool,
+
+    device_mac: Option<String>,
+}
+
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = Args::parse();
     let conn = Builder::system()?.build().await?;
     let rt_handle = tokio::runtime::Handle::current();
     
-    let state = Arc::new(Mutex::new(AirPodsState::default()));
+    let state = Arc::new(Mutex::new(AirPodsState {
+        debug_mode: args.debug,
+        ..AirPodsState::default()
+    }));
     let s_socket = state.clone();
     tokio::spawn(async move { socket::start_listener(s_socket).await });
 
