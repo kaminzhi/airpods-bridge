@@ -28,6 +28,11 @@ To target with MAC address
 ./target/release/airpods-bridge AA:BB:CC:DD:EE:FF
 ```
 
+To target with raw
+```bash
+./target/release/airpods-bridge --debug
+```
+
 JSON Format
 ```
 {
@@ -41,7 +46,7 @@ JSON Format
 }
 ```
 
-# Cycling ANC Modes
+## Cycling ANC Modes
 
 Once the bridge is running, send the cycle command to the socket using nc:
 ```bash
