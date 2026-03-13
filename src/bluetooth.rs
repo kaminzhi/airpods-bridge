@@ -3,12 +3,16 @@ use crate::state::SharedState;
 use std::collections::HashMap;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use tokio::io::unix::AsyncFd;
+use tokio::runtime::Handle;
 use tokio::time::{self, Duration};
 use zbus::{interface, proxy, zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value}};
 
 pub const AIRPODS_UUID: &str = "74ec2172-0bad-4d01-8f77-997b2be0722a";
 
-pub struct Profile { pub state: SharedState }
+pub struct Profile { 
+    pub state: SharedState,
+    pub rt_handle: Handle,
+}
 
 #[interface(name = "org.bluez.Profile1")]
 impl Profile {
@@ -19,7 +23,10 @@ impl Profile {
             s.connected = true;
             s.print_json();
         }
-        tokio::spawn(run_rfcomm_session(owned, self.state.clone()));
+        let st = self.state.clone();
+        self.rt_handle.spawn(async move {
+            run_rfcomm_session(owned, st).await;
+        });
     }
     async fn release(&self) {}
     async fn request_disconnection(&self, _d: ObjectPath<'_>) {}
@@ -34,20 +41,24 @@ async fn run_rfcomm_session(fd: OwnedFd, state: SharedState) {
         libc::fcntl(raw_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
     }
 
-    let async_fd = AsyncFd::new(fd).unwrap();
+    let async_fd = match AsyncFd::new(fd) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
     let _ = unsafe { libc::send(raw_fd, protocol::HANDSHAKE.as_ptr() as _, protocol::HANDSHAKE.len(), 0) };
 
     let s_hb = state.clone();
     tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(5));
+        let mut interval = time::interval(Duration::from_secs(3));
         loop {
             interval.tick().await;
-            let fd = {
+            let fd_val = {
                 let s = s_hb.lock().unwrap();
                 if !s.connected { break; }
                 s.session_fd
             };
-            if let Some(f) = fd {
+            if let Some(f) = fd_val {
                 let _ = unsafe { libc::send(f, protocol::REQUEST_NOTIF.as_ptr() as _, protocol::REQUEST_NOTIF.len(), 0) };
             }
         }
@@ -68,7 +79,6 @@ async fn run_rfcomm_session(fd: OwnedFd, state: SharedState) {
                     }
                     guard.retain_ready();
                 } else if n == 0 {
-                    eprintln!("[Debug] Connection closed by peer (n=0)");
                     break;
                 } else {
                     let err = std::io::Error::last_os_error();
@@ -76,14 +86,10 @@ async fn run_rfcomm_session(fd: OwnedFd, state: SharedState) {
                         guard.clear_ready();
                         continue;
                     }
-                    eprintln!("[Debug] Recv error: {}", err);
                     break;
                 }
             }
-            Err(e) => {
-                eprintln!("[Debug] AsyncFd error: {}", e);
-                break;
-            }
+            Err(_) => break,
         }
     }
     let mut s = state.lock().unwrap();
@@ -95,6 +101,7 @@ pub trait Device {
     async fn connect_profile(&self, uuid: &str) -> zbus::Result<()>;
     #[zbus(property)] fn alias(&self) -> zbus::Result<String>;
     #[zbus(property)] fn paired(&self) -> zbus::Result<bool>;
+    #[zbus(property)] fn connected(&self) -> zbus::Result<bool>;
 }
 
 #[proxy(interface = "org.bluez.ProfileManager1", default_service = "org.bluez", default_path = "/org/bluez")]

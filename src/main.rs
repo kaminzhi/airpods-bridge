@@ -6,6 +6,7 @@ mod socket;
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio::time::{self, Duration};
 use zbus::connection::Builder;
 use zbus::zvariant::{ObjectPath, Value};
 use crate::state::AirPodsState;
@@ -19,34 +20,30 @@ async fn find_airpods_path(conn: &zbus::Connection) -> Result<String> {
     for (path, interfaces) in objects {
         if interfaces.contains_key("org.bluez.Device1") {
             let dev = DeviceProxy::builder(conn).path(path.clone())?.build().await?;
-            if dev.paired().await? && dev.alias().await?.to_lowercase().contains("airpods") {
+            let alias = dev.alias().await?.to_lowercase();
+            if dev.paired().await? && alias.contains("airpods") {
                 return Ok(path.to_string());
             }
         }
     }
-    Err(anyhow!("No paired AirPods found automatically"))
+    Err(anyhow!("No paired AirPods found"))
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let conn = Builder::system()?.build().await?;
+    let rt_handle = tokio::runtime::Handle::current();
     
-    let dev_path = if let Some(arg) = std::env::args().nth(1) {
-        format!("/org/bluez/hci0/dev_{}", arg.trim().replace(':', "_").to_uppercase())
-    } else {
-        find_airpods_path(&conn).await?
-    };
-
     let state = Arc::new(Mutex::new(AirPodsState::default()));
     let s_socket = state.clone();
     tokio::spawn(async move { socket::start_listener(s_socket).await });
 
     conn.object_server()
-        .at(PROFILE_DBUS_PATH, Profile { state: state.clone() })
+        .at(PROFILE_DBUS_PATH, Profile { 
+            state: state.clone(),
+            rt_handle,
+        })
         .await?;
-
-    let dev = DeviceProxy::builder(&conn).path(ObjectPath::try_from(dev_path.clone())?)?.build().await?;
-    state.lock().unwrap().device_name = dev.alias().await?;
 
     let pm = ProfileManagerProxy::new(&conn).await?;
     let mut opts = HashMap::new();
@@ -55,10 +52,20 @@ async fn main() -> Result<()> {
 
     let _ = pm.unregister_profile(ObjectPath::try_from(PROFILE_DBUS_PATH)?).await;
     pm.register_profile(ObjectPath::try_from(PROFILE_DBUS_PATH)?, AIRPODS_UUID, opts).await?;
-    
-    let _ = dev.connect_profile(AIRPODS_UUID).await;
 
-    tokio::signal::ctrl_c().await?;
-    let _ = std::fs::remove_file(socket::SOCKET_PATH);
-    Ok(())
+    loop {
+        let is_connected = { state.lock().unwrap().connected };
+
+        if !is_connected {
+            if let Ok(path) = find_airpods_path(&conn).await {
+                if let Ok(dev) = DeviceProxy::builder(&conn).path(ObjectPath::try_from(path)?)?.build().await {
+                    if dev.connected().await.unwrap_or(false) {
+                        let _ = dev.connect_profile(AIRPODS_UUID).await;
+                    }
+                }
+            }
+        }
+        
+        time::sleep(Duration::from_secs(5)).await;
+    }
 }
