@@ -25,17 +25,23 @@ pub async fn start_listener(state: SharedState) {
 
 async fn handle_command(cmd: &str, state: SharedState) {
     if cmd == "cycle" {
-        let (fd, mode, seq) = {
+        let (fd, mode, seq, left_on, right_on) = {
             let s = state.lock().unwrap();
-            (s.session_fd, s.anc_mode.clone(), s.seq)
+            (s.session_fd, s.anc_mode.clone(), s.seq, s.left.level.is_some(), s.right.level.is_some())
         };
         if let (Some(f), Some(m)) = (fd, mode) {
+            let can_use_anc = left_on && right_on;
             let target = match m.as_str() {
                 "Off" => 2,
                 "Noise Cancellation" => 3,
                 "Transparency" => 1,
                 _ => 2,
             };
+
+            if !(left_on && right_on) {
+                eprintln!("[Info] Single earbud detected. ANC toggle might be restricted by hardware.");
+            }
+
             for op in [0x0d, 0x01] {
                 let p = protocol::build_anc_payload(target, seq, op);
                 let _ = unsafe { libc::send(f, p.as_ptr() as _, p.len(), 0) };

@@ -25,17 +25,21 @@ fn identify_model(alias: &str, modalias: &str) -> String {
     alias.into()
 }
 
-async fn find_airpods(conn: &zbus::Connection) -> Result<(String, String)> {
+async fn find_airpods(conn: &zbus::Connection) -> Result<(String, String, String)> {
     let om = ObjectManagerProxy::new(conn).await?;
     let objects = om.get_managed_objects().await?;
     for (path, interfaces) in objects {
         if interfaces.contains_key("org.bluez.Device1") {
             let dev = DeviceProxy::builder(conn).path(path.clone())?.build().await?;
-            let alias = dev.alias().await?;
-            if dev.paired().await? && alias.to_lowercase().contains("airpods") {
+            let mut alias = dev.alias().await.unwrap_or_default();
+            if alias == "AirPods" && dev.connected().await.unwrap_or(false) {
+                time::sleep(Duration::from_millis(500)).await;
+                alias = dev.alias().await.unwrap_or(alias);
+            }
+            if alias.to_lowercase().contains("airpods") {
                 let mod_str = dev.modalias().await.unwrap_or_default();
                 let model = identify_model(&alias, &mod_str);
-                return Ok((path.to_string(), model));
+                return Ok((path.to_string(), alias, model));
             }
         }
     }
@@ -80,10 +84,12 @@ async fn main() -> Result<()> {
     loop {
         let is_connected = { state.lock().unwrap().connected };
         if !is_connected {
-            if let Ok((path, model)) = find_airpods(&conn).await {
+            if let Ok((path, alias, model)) = find_airpods(&conn).await {
+                let path_clone = path.clone();
                 if let Ok(dev) = DeviceProxy::builder(&conn).path(ObjectPath::try_from(path)?)?.build().await {
                     {
                         let mut s = state.lock().unwrap();
+                        s.device_name = alias;
                         s.model_name = model;
                     }
                     if dev.connected().await.unwrap_or(false) {
