@@ -12,6 +12,7 @@ pub struct BatteryInfo {
 #[derive(Serialize, Clone, Debug)]
 pub struct AirPodsState {
     pub device_name: String,
+    pub model_name: String,
     pub anc_mode: Option<String>,
     pub connected: bool,
     pub left: BatteryInfo,
@@ -29,6 +30,7 @@ impl Default for AirPodsState {
     fn default() -> Self {
         Self {
             device_name: "AirPods".into(),
+            model_name: "Unknown".into(),
             anc_mode: None,
             connected: false,
             left: BatteryInfo { level: None, charging: false },

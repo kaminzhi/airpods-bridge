@@ -102,6 +102,7 @@ pub trait Device {
     #[zbus(property)] fn alias(&self) -> zbus::Result<String>;
     #[zbus(property)] fn paired(&self) -> zbus::Result<bool>;
     #[zbus(property)] fn connected(&self) -> zbus::Result<bool>;
+    #[zbus(property)] fn modalias(&self) -> zbus::Result<String>;
 }
 
 #[proxy(interface = "org.bluez.ProfileManager1", default_service = "org.bluez", default_path = "/org/bluez")]

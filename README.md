@@ -32,6 +32,7 @@ JSON Format
 ```
 {
   "device_name": "AirPods Pro",
+  "model_name": "AirPods Pro (Gen *)"
   "anc_mode": "Noise Cancellation",
   "connected": true,
   "left": { "level": 90, "charging": false },
