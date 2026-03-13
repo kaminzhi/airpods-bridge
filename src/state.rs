@@ -35,9 +35,18 @@ impl Default for AirPodsState {
             model_name: "Unknown".into(),
             anc_mode: None,
             connected: false,
-            left: BatteryInfo { level: None, charging: false },
-            right: BatteryInfo { level: None, charging: false },
-            case: BatteryInfo { level: None, charging: false },
+            left: BatteryInfo {
+                level: None,
+                charging: false,
+            },
+            right: BatteryInfo {
+                level: None,
+                charging: false,
+            },
+            case: BatteryInfo {
+                level: None,
+                charging: false,
+            },
             debug_mode: false,
             session_fd: None,
             seq: 0x01,
