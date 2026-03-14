@@ -46,9 +46,22 @@ JSON Format
 }
 ```
 
+## VFS Interface (Sys-like)
+
+In addition to JSON streaming, `airpods-bridge` creates a structured directory at `/tmp/airpods-bridge/` for easy access via standard shell commands:
+
+```bash
+# Get left earbud battery
+cat /tmp/airpods-bridge/capacity_left
+
+# Check current ANC mode
+cat /tmp/airpods-bridge/anc_mode
+```
+
 ## Cycling ANC Modes
 
 Once the bridge is running, send the cycle command to the socket using nc:
+
 ```bash
 echo "cycle" | nc -U /tmp/airpods.sock
 ```
